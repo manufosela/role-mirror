@@ -12,17 +12,27 @@ import { aggregateFlow } from '../domain/aggregate.js';
 const KINDS = new Set(['squad', 'chapter']);
 
 /**
- * Da de alta una unidad de flujo (un label de Linear).
+ * Da de alta una unidad de flujo: mide un LABEL de Linear o un EQUIPO entero.
+ *
+ * El equipo hace falta porque hay equipos cuyo trabajo no lleva label de
+ * «Squad» —Matcher y Plataforma— y por label son invisibles. Una unidad sin
+ * ninguna de las dos cosas no se crea: medir sin filtro devuelve el workspace
+ * entero, y ese número pasa por una métrica de equipo.
+ *
  * @param {LeanPersistence} persistence
- * @param {{ linearLabel: string, kind: LeanUnitKind, name?: string }} input
+ * @param {{ linearLabel?: string, linearTeamKey?: string, kind: LeanUnitKind, name?: string }} input
  * @returns {Promise<string>}
  */
 export function addUnit(persistence, input) {
   const linearLabel = String(input.linearLabel ?? '').trim();
-  if (!linearLabel) throw new Error('El label de Linear es obligatorio');
+  const linearTeamKey = String(input.linearTeamKey ?? '').trim();
+  if (!linearLabel && !linearTeamKey) throw new Error('La unidad necesita un label o un equipo de Linear');
   const kind = KINDS.has(input.kind) ? input.kind : 'squad';
-  const name = String(input.name ?? '').trim() || linearLabel;
-  return persistence.units.add({ linearLabel, kind, name, createdAt: new Date().toISOString() });
+  const name = String(input.name ?? '').trim() || linearLabel || linearTeamKey;
+  const unit = { kind, name, createdAt: new Date().toISOString() };
+  if (linearLabel) unit.linearLabel = linearLabel;
+  if (linearTeamKey) unit.linearTeamKey = linearTeamKey;
+  return persistence.units.add(unit);
 }
 
 /** @param {LeanPersistence} persistence */

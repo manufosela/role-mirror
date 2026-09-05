@@ -8,7 +8,9 @@
  * @typedef {Object} LeanUnit   Unidad de flujo monitorizada = un LABEL de Linear
  *   (equipo o gremio). El flujo se mide filtrando las issues por ese label.
  * @property {string} id
- * @property {string} linearLabel     Nombre del label en Linear (p. ej. «Trust», «Backend»).
+ * @property {string} [linearLabel]   Nombre del label en Linear (p. ej. «Trust», «Backend»).
+ * @property {string} [linearTeamKey] Clave del EQUIPO de Linear (p. ej. «MAT»), cuando el trabajo
+ *   no lleva label: manda sobre el label si están los dos.
  * @property {LeanUnitKind} kind       'squad' (equipo) o 'chapter' (gremio).
  * @property {string} name            Nombre visible (por defecto = linearLabel).
  * @property {string} [ownerLeaderUid]   Líder dueño (permisología multi-leader).

@@ -32,6 +32,12 @@ async function conUnidades(fn) {
     linearLabel: 'E2E CAEs', name: 'E2E CAEs', kind: 'squad',
     subdomainKey: 'e2e-caes', ownerLeaderUid: SUPERADMIN_UID, createdAt: new Date().toISOString(),
   });
+  // Una unidad que mide un EQUIPO de Linear: es el caso de Matcher y Plataforma,
+  // cuyas issues no llevan label de «Squad».
+  await db().doc('leanTeams/e2e-unit-team').set({
+    linearTeamKey: 'E2EMAT', name: 'E2E Matcher', kind: 'squad',
+    subdomainKey: 'e2e-tribbu-core', ownerLeaderUid: SUPERADMIN_UID, createdAt: new Date().toISOString(),
+  });
   await db().doc('leanTeams/e2e-unit-suelta').set({
     linearLabel: 'E2E Mario Netas', name: 'E2E Mario Netas', kind: 'squad',
     ownerLeaderUid: SUPERADMIN_UID, createdAt: new Date().toISOString(),
@@ -42,7 +48,9 @@ async function conUnidades(fn) {
     name: 'e2e-unit-huerfana', ownerLeaderUid: SUPERADMIN_UID, createdAt: new Date().toISOString(),
   });
   try { await fn(); } finally {
-    for (const id of ['e2e-unit-caes', 'e2e-unit-suelta', 'e2e-unit-huerfana']) await db().doc(`leanTeams/${id}`).delete();
+    for (const id of ['e2e-unit-caes', 'e2e-unit-suelta', 'e2e-unit-huerfana', 'e2e-unit-team']) {
+      await db().doc(`leanTeams/${id}`).delete();
+    }
     for (const [coleccion, claves] of Object.entries(CLAVES)) {
       const snap = await db().collection(coleccion).where('key', 'in', claves).get();
       for (const d of snap.docs) await d.ref.delete();
@@ -107,5 +115,16 @@ test('una unidad sin clasificar se ve, y se arregla desde la propia tabla', asyn
 
     // Y deja de estar suelta: ya es un gremio como los demás.
     await expect(unidades(page).getByRole('heading', { name: /Sin clasificar/ })).toHaveCount(0);
+  });
+});
+
+test('la tabla dice qué mide cada unidad en Linear: label o equipo', async ({ page }) => {
+  await conUnidades(async () => {
+    await abrirUnidades(page);
+    // La primera columna dice de dónde salen las issues. Sin esto, una unidad
+    // que mide un equipo aparecía con la celda vacía y parecía no medir nada.
+    const fuentes = await unidades(page).locator('td.label-cell').allTextContents();
+    expect(fuentes).toContain('Equipo E2EMAT');
+    expect(fuentes).toContain('Label «E2E CAEs»');
   });
 });

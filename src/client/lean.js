@@ -26,7 +26,7 @@ onUserChanged(async (user) => {
       return;
     }
 
-    const { persistence, refresh, discover } = await createLeanContainer({
+    const { persistence, refresh, discover, listTeams } = await createLeanContainer({
       mode: 'firestore',
       leaderUid: user.uid,
       viewAll: canGovern(access), // el gobierno de instancia ve y gestiona las unidades de toda la organización
@@ -35,6 +35,7 @@ onUserChanged(async (user) => {
     app.canEdit = canGovern(access) || leadsTeam(access) || gate.manage;
     app.refresh = refresh;
     app.discover = discover;
+    app.listTeams = listTeams;
     app.interpret = interpretMetrics; // (re)generar la interpretación: solo el gobierno
     app.loadSaved = loadInterpretation; // interpretación guardada: la ven todos
     app.canInterpret = canGovern(access); // el botón solo lo ve el gobierno de instancia
