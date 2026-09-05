@@ -14,6 +14,7 @@ export class LeanApp extends MetricsToolApp {
   static properties = {
     ...MetricsToolApp.properties,
     discover: { attribute: false },
+    listTeams: { attribute: false },
     interpret: { attribute: false },
     loadSaved: { attribute: false },
     canInterpret: { attribute: false },
@@ -28,6 +29,7 @@ export class LeanApp extends MetricsToolApp {
   constructor() {
     super();
     this.discover = null;
+    this.listTeams = null;
     this.interpret = null;
     this.loadSaved = null;
     this.canInterpret = false;
@@ -39,7 +41,7 @@ export class LeanApp extends MetricsToolApp {
 
   renderView() {
     if (this.view === 'teams') {
-      return html`<lean-teams .persistence=${this.persistence} .canEdit=${this.canEdit} .refresh=${this.refresh} .discover=${this.discover}></lean-teams>`;
+      return html`<lean-teams .persistence=${this.persistence} .canEdit=${this.canEdit} .refresh=${this.refresh} .discover=${this.discover} .listTeams=${this.listTeams}></lean-teams>`;
     }
     if (this.view === 'atascos') {
       return html`<lean-old-issues .persistence=${this.persistence} .refresh=${this.refresh}></lean-old-issues>`;

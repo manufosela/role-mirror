@@ -13,7 +13,22 @@ describe('LEAN usecases (unidades = labels de Linear)', () => {
     expect(u.linearLabel).toBe('Trust');
     expect(u.kind).toBe('squad');
     expect(u.name).toBe('Equipo Trust');
-    expect(() => addUnit(p, { linearLabel: '  ', kind: 'squad' })).toThrow(/obligatorio/);
+    expect(() => addUnit(p, { linearLabel: '  ', kind: 'squad' })).toThrow(/label o un equipo/);
+  });
+
+  it('addUnit acepta un EQUIPO de Linear, para lo que no lleva label', async () => {
+    // Matcher y Plataforma son equipos de Linear cuyas issues no llevan label de
+    // «Squad»: por label serían invisibles.
+    const id = await addUnit(p, { linearTeamKey: 'MAT', kind: 'squad', name: 'Matcher' });
+    const [u] = await listUnits(p);
+    expect(u.id).toBe(id);
+    expect(u.linearTeamKey).toBe('MAT');
+    expect(u.linearLabel).toBeUndefined();
+  });
+
+  it('sin nombre, el del equipo sirve de rótulo', async () => {
+    await addUnit(p, { linearTeamKey: 'PLA', kind: 'squad' });
+    expect((await listUnits(p))[0].name).toBe('PLA');
   });
 
   it('name por defecto = label; kind inválido cae a squad', async () => {

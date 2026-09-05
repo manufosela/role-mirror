@@ -24,6 +24,7 @@ export async function createLeanContainer(options = {}) {
       persistence: createMemoryLeanPersistence(seed, { leaderUid, viewAll }),
       refresh: async () => ({ results: [] }),
       discover: async () => ({ created: [] }),
+      listTeams: async () => ({ teams: [] }),
     };
   }
   if (mode === 'firestore') {
@@ -47,7 +48,10 @@ export async function createLeanContainer(options = {}) {
     // equipos (Squad) y gremios (Chapter) desde los labels de Linear.
     const refresh = () => callFn('refreshLean');
     const discover = () => callFn('discoverLeanUnits');
-    return { mode, persistence: createFirestoreLeanPersistence(database, leaderUid, { viewAll }), refresh, discover };
+    // listTeams: equipos de Linear para poder medir los que no llevan label de
+    // «Squad» —Matcher y Plataforma, hoy invisibles—. Solo lectura.
+    const listTeams = () => callFn('listLinearTeams');
+    return { mode, persistence: createFirestoreLeanPersistence(database, leaderUid, { viewAll }), refresh, discover, listTeams };
   }
   throw new Error(`Modo de container LEAN desconocido: ${mode}`);
 }

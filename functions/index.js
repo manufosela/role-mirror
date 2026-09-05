@@ -1649,9 +1649,43 @@ function flowEfficiencyFn(issues) {
   return total > 0 ? Math.round((active / total) * 1000) / 10 : null;
 }
 
-/** Trae las issues con un LABEL de Linear actualizadas desde `sinceIso` (paginado, GraphQL). */
-async function fetchLinearIssues(label, sinceIso, apiKey) {
-  const filter = { labels: { name: { eq: label } }, updatedAt: { gte: sinceIso } };
+/**
+ * Qué mide una unidad de flujo (espejo de src/tools/lean/domain/source.js).
+ * El EQUIPO manda sobre el label cuando están los dos: es el filtro más
+ * específico, y mezclarlos contaría dos veces lo mismo.
+ */
+function unitSourceFn(unit) {
+  const team = String(unit?.linearTeamKey ?? '').trim();
+  if (team) return { kind: 'team', value: team };
+  const label = String(unit?.linearLabel ?? '').trim();
+  if (label) return { kind: 'label', value: label };
+  return { kind: 'none', value: '' };
+}
+
+/**
+ * Filtro de issues para Linear, o `null` si la unidad no tiene nada que medir.
+ * Ese `null` importa: preguntar SIN filtro trae el workspace entero, y así fue
+ * como una unidad sin label acabó con 243 completadas y 101 WIP que parecían
+ * las de un equipo.
+ */
+function linearIssueFilterFn(unit, sinceIso) {
+  const { kind, value } = unitSourceFn(unit);
+  const updatedAt = { gte: sinceIso };
+  if (kind === 'team') return { team: { key: { eq: value } }, updatedAt };
+  if (kind === 'label') return { labels: { name: { eq: value } }, updatedAt };
+  return null;
+}
+
+/** Cómo se nombra la fuente de una unidad en mensajes y logs. */
+function sourceLabelFn(unit) {
+  const { kind, value } = unitSourceFn(unit);
+  if (kind === 'team') return `Equipo ${value}`;
+  if (kind === 'label') return `Label «${value}»`;
+  return 'Sin fuente';
+}
+
+/** Trae las issues que casan con un FILTRO de Linear (paginado, GraphQL). */
+async function fetchLinearIssues(filter, apiKey) {
   const out = [];
   let after = null;
   for (let page = 0; page < 50; page += 1) { // tope de seguridad (~5000 issues)
@@ -1780,15 +1814,20 @@ export const refreshLean = onCall(
     const results = [];
     for (const docSnap of unitsSnap.docs) {
       const unit = docSnap.data();
+      const fuente = sourceLabelFn(unit);
       try {
-        const issues = await fetchLinearIssues(unit.linearLabel, from, apiKey);
+        const filter = linearIssueFilterFn(unit, from);
+        // Sin fuente NO se pregunta: un filtro vacío devuelve el workspace
+        // entero y el número resultante pasa por una métrica de equipo.
+        if (!filter) throw new Error('Esta unidad no mide nada: dale un label o un equipo de Linear.');
+        const issues = await fetchLinearIssues(filter, apiKey);
         const metrics = computeFlowMetricsFn(issues, { from, to, now: to });
         await docSnap.ref.set({ metrics: { ...metrics, periodFrom: from, periodTo: to, computedAt: to } }, { merge: true });
-        results.push({ id: docSnap.id, label: unit.linearLabel, ok: true });
+        results.push({ id: docSnap.id, label: unit.linearLabel ?? null, source: fuente, ok: true });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Error desconocido.';
         await docSnap.ref.set({ metrics: { error: msg, computedAt: to } }, { merge: true });
-        results.push({ id: docSnap.id, label: unit.linearLabel, ok: false, error: msg });
+        results.push({ id: docSnap.id, label: unit.linearLabel ?? null, source: fuente, ok: false, error: msg });
       }
     }
     return { computedAt: to, results };
@@ -1857,6 +1896,49 @@ export const discoverLeanUnits = onCall(
       }
     }
     return { created };
+  },
+);
+
+const LINEAR_TEAMS_QUERY = 'query { teams(first: 100) { nodes { key name } } }';
+
+/**
+ * Equipos de Linear, para poder elegirlos al dar de alta una unidad de flujo.
+ * Solo LECTURA: GREBLA nunca escribe en Linear.
+ *
+ * Hace falta porque hay equipos cuyo trabajo no lleva label de «Squad» —Matcher
+ * y Plataforma, con más de 200 issues vivas entre los dos— y sin esto no habría
+ * forma de medirlos. Acceso: superadmin o líder, igual que el descubrimiento.
+ */
+export const listLinearTeams = onCall(
+  { region: 'europe-west1', secrets: [LINEAR_API_KEY], timeoutSeconds: 60 },
+  async (request) => {
+    const uid = request.auth?.uid;
+    if (!uid) throw new HttpsError('unauthenticated', 'Necesitas iniciar sesión.');
+
+    const db = getFirestore();
+    const [adminSnap, leaderSnap] = await Promise.all([
+      db.doc(`admins/${uid}`).get(),
+      db.doc(`leaders/${uid}`).get(),
+    ]);
+    if (!adminSnap.exists && !leaderSnap.exists) {
+      throw new HttpsError('permission-denied', 'No tienes acceso a esta organización.');
+    }
+
+    const apiKey = LINEAR_API_KEY.value();
+    if (!apiKey) throw new HttpsError('failed-precondition', 'Linear no está configurado en esta instancia.');
+
+    const res = await fetch('https://api.linear.app/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: apiKey },
+      body: JSON.stringify({ query: LINEAR_TEAMS_QUERY }),
+    });
+    if (!res.ok) throw new HttpsError('internal', `Linear respondió ${res.status}.`);
+    const json = await res.json();
+    if (json.errors?.length) throw new HttpsError('internal', json.errors[0]?.message || 'Error de la API de Linear.');
+    const teams = (json.data?.teams?.nodes ?? [])
+      .map((t) => ({ key: t.key, name: t.name }))
+      .filter((t) => t.key);
+    return { teams };
   },
 );
 

@@ -9,6 +9,7 @@ import { tableStyles } from '../common/table-styles.js';
 import { skeletonLines } from '../app-skeleton.js';
 import { addUnit, listUnits, removeUnit, linkUnitToSubdomain, classifyUnit } from '../../tools/lean/application/usecases.js';
 import { classifyUnits } from '../../tools/lean/domain/scope.js';
+import { sourceLabel } from '../../tools/lean/domain/source.js';
 import { subdomainChoices } from '../../tools/team/domain/domains.js';
 import { listDomains, listSubdomains } from '../../lib/domains.js';
 
@@ -22,10 +23,14 @@ export class LeanTeams extends LitElement {
     canEdit: { attribute: false },
     refresh: { attribute: false },
     discover: { attribute: false },
+    listTeams: { attribute: false },
     _units: { state: true },
     _subdomains: { state: true },
     _choices: { state: true },
     _label: { state: true },
+    _source: { state: true },
+    _team: { state: true },
+    _teams: { state: true },
     _kind: { state: true },
     _name: { state: true },
     _refreshing: { state: true },
@@ -69,10 +74,14 @@ export class LeanTeams extends LitElement {
     this.canEdit = false;
     this.refresh = null;
     this.discover = null;
+    this.listTeams = null;
     this._units = [];
     this._subdomains = [];
     this._choices = [];
     this._label = '';
+    this._source = 'label';
+    this._team = '';
+    this._teams = [];
     this._kind = 'squad';
     this._name = '';
     this._refreshing = false;
@@ -146,13 +155,44 @@ export class LeanTeams extends LitElement {
     }
   }
 
-  async _add() {
-    const linearLabel = this._label.trim();
-    if (!linearLabel) return;
-    this._error = '';
+  _canAdd() {
+    return this._source === 'team' ? Boolean(this._team) : Boolean(this._label.trim());
+  }
+
+  /**
+   * Los equipos se piden a Linear al elegir esa fuente, no al abrir la pantalla:
+   * quien solo viene a mirar métricas no tiene por qué pagar una llamada a su API.
+   */
+  async _pickSource(source) {
+    this._source = source;
+    if (source !== 'team' || this._teams.length > 0 || !this.listTeams) return;
     try {
-      await addUnit(this.persistence, { linearLabel, kind: this._kind, name: this._name.trim() });
+      const res = await this.listTeams();
+      this._teams = res?.teams ?? [];
+    } catch (err) {
+      this._error = err instanceof Error ? err.message : 'No se pudieron traer los equipos de Linear.';
+    }
+  }
+
+  _renderTeamPicker() {
+    return html`<label>Equipo de Linear
+      <select .value=${this._team} @change=${(e) => { this._team = e.target.value; }}>
+        <option value="">— Elige —</option>
+        ${this._teams.map((t) => html`<option value=${t.key}>${t.name} (${t.key})</option>`)}
+      </select>
+    </label>`;
+  }
+
+  async _add() {
+    if (!this._canAdd()) return;
+    this._error = '';
+    const input = this._source === 'team'
+      ? { linearTeamKey: this._team, kind: this._kind, name: this._name.trim() }
+      : { linearLabel: this._label.trim(), kind: this._kind, name: this._name.trim() };
+    try {
+      await addUnit(this.persistence, input);
       this._label = '';
+      this._team = '';
       this._name = '';
       await this._load();
     } catch (err) {
@@ -208,9 +248,15 @@ export class LeanTeams extends LitElement {
     return html`<details class="manual">
       <summary>Añadir una unidad a mano</summary>
       <div class="row">
-        <label>Label de Linear
-          <input type="text" placeholder="Trust" .value=${this._label} @input=${(e) => { this._label = e.target.value; }} />
+        <label>Fuente
+          <select .value=${this._source} @change=${(e) => this._pickSource(e.target.value)}>
+            <option value="label">Label de Linear</option>
+            <option value="team">Equipo de Linear</option>
+          </select>
         </label>
+        ${this._source === 'team' ? this._renderTeamPicker() : html`<label>Label de Linear
+          <input type="text" placeholder="Trust" .value=${this._label} @input=${(e) => { this._label = e.target.value; }} />
+        </label>`}
         <label>Tipo
           <select .value=${this._kind} @change=${(e) => { this._kind = e.target.value; }}>
             <option value="squad">Equipo (Squad)</option>
@@ -220,7 +266,7 @@ export class LeanTeams extends LitElement {
         <label>Nombre (opcional)
           <input type="text" placeholder="Equipo Trust" .value=${this._name} @input=${(e) => { this._name = e.target.value; }} />
         </label>
-        <button class="btn" ?disabled=${!this._label.trim()} @click=${() => this._add()}>Añadir</button>
+        <button class="btn" ?disabled=${!this._canAdd()} @click=${() => this._add()}>Añadir</button>
       </div>
     </details>`;
   }
@@ -247,8 +293,8 @@ export class LeanTeams extends LitElement {
       ${conSubdominio ? this._renderUnlinkedWarning(units) : null}
       <div class="table-wrap"><table>
         <thead><tr>
-          <th>Label</th><th>Nombre</th>
-          ${conSubdominio ? html`<th>Mide</th>` : null}
+          <th>Mide en Linear</th><th>Nombre</th>
+          ${conSubdominio ? html`<th>Subdominio</th>` : null}
           <th>Últimas métricas</th>${this.canEdit ? html`<th></th>` : null}
         </tr></thead>
         <tbody>${units.map((u) => this._renderRow(u, conSubdominio))}</tbody>
@@ -323,7 +369,7 @@ export class LeanTeams extends LitElement {
 
   _renderRow(u, conSubdominio) {
     return html`<tr>
-      <td class="label-cell">${u.linearLabel}</td>
+      <td class="label-cell">${sourceLabel(u)}</td>
       <td>${u.name}</td>
       ${conSubdominio ? html`<td>${this._renderSubdomain(u)}</td>` : null}
       <td>${this._renderStatus(u.metrics)}</td>
