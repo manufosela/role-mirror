@@ -139,30 +139,3 @@ export function buildSnapshot({ subdomain, domain, name, updatedAt, periodStart,
   };
 }
 
-/**
- * IDs ANTIGUOS que hay que seguir alimentando mientras el portal migra.
- *
- * Su informe de Slack encuentra cada entidad por el id con el que se publicó
- * siempre (el slug del nombre). Dos entidades cambian de clave con el contrato
- * nuevo, y si dejaran de escribirse el mensaje semanal se quedaría sin ellas.
- * Así que durante la transición se publica en los DOS sitios.
- *
- * Es una lista corta, explícita y con fecha de caducidad: se borra —y con ella
- * los documentos antiguos— cuando la sesión del portal confirme que lee por key.
- * No se calcula con slugify a propósito: recalcularla desde el nombre es la
- * derivación que este ADR viene a quitar.
- */
-export const LEGACY_IDS = {
-  'internal-products-core': 'internal-products',
-  'tribbu-app-core': 'the-mario-netas',
-};
-
-/**
- * Documento espejo para el id antiguo: el mismo contenido, marcado para que el
- * portal sepa que está duplicado y no cuente dos veces lo mismo.
- * @param {object} snapshot  el documento ya ensamblado con la clave nueva
- * @returns {object}
- */
-export function legacyMirror(snapshot) {
-  return { ...snapshot, squad: LEGACY_IDS[snapshot.subdomain], legacy: true, supersededBy: snapshot.subdomain };
-}
