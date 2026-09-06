@@ -11,7 +11,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   publishSquadMetrics, scopeOf, subdomainKeyForTeam, buildSnapshot, leanCurrent, doraCurrent,
-  legacyMirror, LEGACY_IDS,
 } from './portal.js';
 import * as puro from '../src/tools/portal/domain/snapshot.js';
 
@@ -65,6 +64,8 @@ describe('publishSquadMetrics: la clave sale del catálogo, no del nombre', () =
     const res = await publishSquadMetrics({ greblaDb: grebla, portalDb: portal, nowIso: '2026-09-07T06:00:00Z' });
 
     expect(res.lean).toBe(1);
+    // Un documento, y solo uno: se acabó la doble escritura de la transición.
+    expect([...portal.written.keys()]).toEqual(['metrics_lean/tribbu-app-core']);
     expect(portal.written.get('metrics_lean/tribbu-app-core')).toMatchObject({
       subdomain: 'tribbu-app-core', domain: 'tribbu-app', squad: 'tribbu-app-core',
       name: 'The Mario Netas',
@@ -82,45 +83,6 @@ describe('publishSquadMetrics: la clave sale del catálogo, no del nombre', () =
     expect(portal.written.get('metrics_lean/caes').name).toBe('CAEs');
   });
 
-  it('durante la transición el id antiguo se sigue alimentando, marcado', async () => {
-    // El informe de Slack del portal busca «the-mario-netas»: si dejara de
-    // escribirse, el mensaje semanal se quedaría sin esa entidad.
-    const grebla = fakeGrebla({
-      units: [{ id: 'u1', kind: 'squad', name: 'The Mario Netas', subdomainKey: 'tribbu-app-core', metrics: METRICS }],
-    });
-    const portal = fakePortal();
-    await publishSquadMetrics({ greblaDb: grebla, portalDb: portal, nowIso: '2026-09-07T06:00:00Z' });
-
-    expect([...portal.written.keys()].toSorted())
-      .toEqual(['metrics_lean/the-mario-netas', 'metrics_lean/tribbu-app-core']);
-    expect(portal.written.get('metrics_lean/the-mario-netas')).toMatchObject({
-      squad: 'the-mario-netas', legacy: true, supersededBy: 'tribbu-app-core',
-    });
-  });
-
-  it('el espejo antiguo acumula SU serie, no la del documento nuevo', async () => {
-    // Cada documento lleva su propio histórico: pisar el del antiguo con el del
-    // nuevo cambiaría el informe de Slack a mitad de la transición.
-    const portal = fakePortal({
-      'metrics_lean/the-mario-netas': { series: [{ periodStart: '2026-08-31', throughput: 1.6 }] },
-    });
-    const grebla = fakeGrebla({
-      units: [{ id: 'u1', kind: 'squad', name: 'The Mario Netas', subdomainKey: 'tribbu-app-core', metrics: METRICS }],
-    });
-    await publishSquadMetrics({ greblaDb: grebla, portalDb: portal, nowIso: '2026-09-07T06:00:00Z' });
-
-    expect(portal.written.get('metrics_lean/the-mario-netas').series.map((p) => p.periodStart))
-      .toEqual(['2026-08-31', '2026-09-07']);
-  });
-
-  it('una entidad que no cambia de clave no genera espejo', async () => {
-    const grebla = fakeGrebla({
-      units: [{ id: 'u1', kind: 'squad', name: 'CAEs', subdomainKey: 'caes', metrics: METRICS }],
-    });
-    const portal = fakePortal();
-    await publishSquadMetrics({ greblaDb: grebla, portalDb: portal, nowIso: '2026-09-07T06:00:00Z' });
-    expect([...portal.written.keys()]).toEqual(['metrics_lean/caes']);
-  });
 
   it('renombrar la unidad NO cambia dónde se publica: la serie no se parte', async () => {
     const conNombre = (name) => fakeGrebla({
@@ -221,11 +183,6 @@ describe('el espejo no se desvía del dominio puro', () => {
     expect(buildSnapshot(entrada)).toEqual(puro.buildSnapshot(entrada));
   });
 
-  it('legacyMirror y su lista también', () => {
-    const snap = { subdomain: 'tribbu-app-core', domain: 'tribbu-app', squad: 'tribbu-app-core' };
-    expect(legacyMirror(snap)).toEqual(puro.legacyMirror(snap));
-    expect(LEGACY_IDS).toEqual(puro.LEGACY_IDS);
-  });
 
   it('scopeOf y subdomainKeyForTeam también', () => {
     const units = [{ name: 'CAEs', subdomainKey: 'caes' }];
