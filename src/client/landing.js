@@ -5,7 +5,7 @@
  */
 import { onUserChanged } from '../lib/auth.js';
 import { resolveAccess } from '../lib/access.js';
-import { canGovern, hasAccess, hubAsView, leadsTeam } from '../lib/accessRoles.js';
+import { canGovern, hubAsView, leadsTeam } from '../lib/accessRoles.js';
 import { isSurveyAdmin } from '../lib/survey.js';
 import { getMyPerson, ensureEmployeePerson } from '../lib/engineer.js';
 import { listToolPolicies } from '../lib/toolPolicies.js';
@@ -13,6 +13,7 @@ import { canUseTool } from '../tools/team/domain/toolAccess.js';
 import { buildPersonRef } from '../lib/toolGate.js';
 import { getEmployeeDomain } from '../lib/orgConfig.js';
 import { layerTabs, activeTab } from '../lib/hubLayers.js';
+import { isEmployeeOf, hubDestination, needsEmployeePerson } from './hubBoot.js';
 
 const VIEW_FLAG = 'grebla-view';
 /** Pestaña que se estaba mirando, mientras dure la sesión. */
@@ -40,66 +41,54 @@ const adminLink = document.getElementById('admin-link');
 onUserChanged(async (user) => {
   if (!user) return showLanding();
   try {
-    const access = await resolveAccess(user);
-    // Empleado del dominio de la instancia (acceso base, RMR-PCS-0027 · F6): con
-    // email verificado del dominio configurado (/config/org.employeeDomain) accede
-    // al hub aunque no tenga rol. Sin dominio configurado (demo) → siempre false.
-    const email = (user.email ?? '').toLowerCase();
-    const employeeDomain = await getEmployeeDomain();
-    const isEmployee = employeeDomain !== '' && user.emailVerified === true && email.endsWith('@' + employeeDomain);
-    // Gestor de encuestas (People): puede gestionar encuestas aunque no tenga otro
-    // rol; debe llegar a las tools y ver la tarjeta Encuestas (RMR-TSK-0328).
-    const canManageSurveys = canGovern(access) || (await isSurveyAdmin(user.uid));
-    // Sin rol, sin gobierno, sin gestión de encuestas y sin ser empleado del
-    // dominio: landing pública (comportamiento anterior, intacto en la demo).
-    if (!hasAccess(access) && !canManageSurveys && !isEmployee) return showLanding();
-    // El ingeniero ya NO se desvía a su espacio personal (RMR-TSK-0459): entra
-    // al hub como todo el mundo, y lo suyo es la card «Mi espacio». Dos puertas
-    // distintas hacían parecer que era otra aplicación.
-    // El viewer siempre entra al panel de gestión en modo solo lectura: no
-    // gestiona personas propias, así que no hay "usar como manager" para él.
-    // «Un viewer es viewer»: observador puro, sin faceta funcional (accessAxes
-    // la anula en origen) → siempre al panel en solo lectura.
-    if (access.instanceAccess === 'viewer') {
-      location.replace('/admin');
-      return;
+    // Las cinco lecturas, en paralelo (RMR-BUG-0112). Antes eran cuatro esperas encadenadas
+    // y ninguna dependía de la anterior: se encadenaban solo porque cada
+    // decisión se tomaba con el dato recién llegado. Con allSettled, un fallo
+    // transitorio de una lectura no tumba a quien YA está autorizado: el hub se
+    // pinta sin filtrar —como antes de las políticas— y cada herramienta sigue
+    // aplicando su propio control.
+    const [accessRes, domainRes, surveyRes, personRes, policiesRes] = await Promise.allSettled([
+      resolveAccess(user),
+      getEmployeeDomain(),
+      isSurveyAdmin(user.uid),
+      getMyPerson(user.uid),
+      listToolPolicies(),
+    ]);
+    if (accessRes.status !== 'fulfilled') return showLanding();
+    const access = accessRes.value;
+
+    const employeeDomain = domainRes.status === 'fulfilled' ? domainRes.value : '';
+    const isEmployee = isEmployeeOf(user.email ?? '', user.emailVerified, employeeDomain);
+    // Quien gestiona encuestas (People) llega al hub aunque no tenga otro rol.
+    const canManageSurveys = canGovern(access) || (surveyRes.status === 'fulfilled' && surveyRes.value === true);
+
+    const destino = hubDestination({ access, isEmployee, canManageSurveys });
+    if (destino === 'landing') return showLanding();
+    if (destino === 'admin') { location.replace('/admin'); return; }
+
+    let person = personRes.status === 'fulfilled' ? personRes.value : null;
+    const filterFailed = personRes.status !== 'fulfilled' || policiesRes.status !== 'fulfilled';
+    const policies = policiesRes.status === 'fulfilled' ? policiesRes.value : [];
+
+    // La Cloud Function que crea la ficha del empleado solo se llama si de
+    // verdad falta. Antes se esperaba en cada entrada, aunque la ficha llevara
+    // meses creada, y con la función fría son segundos de pantalla en blanco.
+    if (needsEmployeePerson({ isEmployee, person })) {
+      try {
+        await ensureEmployeePerson();
+        person = await getMyPerson(user.uid);
+      } catch {
+        // Que no se pueda sellar la ficha no deja a nadie fuera: entra como
+        // genérico y el superadmin lo verá en las cuentas sin ficha.
+      }
     }
-    // Hub filtrado por las políticas de herramientas según la PERSONA (RMR-PCS-0027):
-    // el superadmin ve todas; el resto solo las que su rama/rol/personId permiten;
-    // un empleado sin ficha se trata como «generico» (solo herramientas everyone).
-    // Las lecturas de persona/políticas se aíslan: si fallan (transitorio), el
-    // usuario YA autorizado no cae a la landing — ve el hub sin filtrar (como antes
-    // de F6), y cada herramienta aplica su propio control de acceso.
-    // Corroboración: un empleado del dominio sin ficha obtiene la suya ('generico')
-    // en su primer login (Cloud Function, tolerante a fallos). Así queda registrado
-    // para que el superadmin le asigne rol/equipo cuando toque.
-    if (isEmployee) await ensureEmployeePerson();
-    let person = null;
-    let policies = [];
-    let filterFailed = false;
-    try {
-      [person, policies] = await Promise.all([getMyPerson(user.uid), listToolPolicies()]);
-    } catch {
-      filterFailed = true;
-    }
-    // buildPersonRef incluye los toolOverrides: las excepciones por persona
-    // cuentan también en la visibilidad de la landing (RMR-TSK-0387).
-    // Vista elegida en el conmutador (RMR-BUG-0104): las cuatro se quedan en el
-    // hub y cambian QUÉ se ve, nunca a dónde se va. Es solo pintado: los permisos
-    // reales no cambian, y cada herramienta valida su acceso por su cuenta.
+
+    // Vista elegida en el conmutador: cambia QUÉ se ve, nunca a dónde se va ni
+    // qué se puede. Los permisos reales no se tocan y cada herramienta valida.
     const vista = hubAsView(sessionStorage.getItem(VIEW_FLAG), {
       isSuperadmin: canGovern(access),
       isLeaderish: canGovern(access) || leadsTeam(access),
     });
-    // Encuestas ya no lleva marcador propio (RMR-TSK-0477): se rige por su
-    // política, como las demás. `canManageSurveys` sigue haciendo falta arriba,
-    // para que un gestor de encuestas SIN otro rol llegue al hub.
-    //
-    // Con esto desaparece su excepción de simulación, y es lo correcto: la
-    // excepción existía porque la card NO seguía la política. Ahora la sigue,
-    // con la ficha de quien mira — y como simular apaga el gobierno, un
-    // superadmin cuya persona no esté en la audiencia deja de verla al simular,
-    // igual que le pasa con Marea o con DORA. Hay E2E que lo fija.
     showTools({
       personRef: vista.generic ? buildPersonRef(null) : buildPersonRef(person),
       policies,
