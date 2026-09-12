@@ -12,8 +12,11 @@ import { listToolPolicies } from '../lib/toolPolicies.js';
 import { canUseTool } from '../tools/team/domain/toolAccess.js';
 import { buildPersonRef } from '../lib/toolGate.js';
 import { getEmployeeDomain } from '../lib/orgConfig.js';
+import { layerTabs, activeTab } from '../lib/hubLayers.js';
 
 const VIEW_FLAG = 'grebla-view';
+/** Pestaña que se estaba mirando, mientras dure la sesión. */
+const TAB_FLAG = 'grebla-hub-tab';
 /** ¿Se está previsualizando el hub como otro rol? */
 const esSimulada = () => ['leader', 'engineer', 'empleado'].includes(sessionStorage.getItem(VIEW_FLAG));
 const landing = document.getElementById('platform-landing');
@@ -25,16 +28,14 @@ setTimeout(() => {
   if (hubLoading && !hubLoading.hidden) showLanding();
 }, 10_000);
 const tools = document.getElementById('tenant-tools');
-// Entrar al panel desde su card SALE de la vista en curso (RMR-TSK-0460): si no,
-// se volvería a la home todavía «como manager» o «como empleado». Es lo que hacía
-// el botón suelto de «Volver a gestión», que la card sustituye. La vista queda en
-// «admin», no en ninguna: al volver al hub el conmutador tiene que saber en cuál
-// estás, y deducirla de la ruta marcaba «Manager» (RMR-BUG-0104).
-document.getElementById('tenant-tools')?.addEventListener('click', (event) => {
-  if (event.target instanceof Element && event.target.closest('[data-admin-only]')) {
-    sessionStorage.setItem(VIEW_FLAG, 'admin');
-  }
-});
+const layersBar = document.getElementById('hub-layers');
+const tabsBox = layersBar?.querySelector('.layer-tabs') ?? null;
+const adminLink = document.getElementById('admin-link');
+// La administración se abre en VENTANA APARTE, así que la vista de esta ventana
+// NO se toca: no has cambiado de vista, has abierto otra cosa. Antes era una
+// tarjeta que navegaba aquí mismo y había que anotar la vista «admin» para que
+// al volver el conmutador no marcara «Manager» (RMR-BUG-0104); con `noopener` la
+// ventana nueva arranca sin flag, y sin flag el hub se pinta con tu rol real.
 
 onUserChanged(async (user) => {
   if (!user) return showLanding();
@@ -114,7 +115,55 @@ onUserChanged(async (user) => {
 function showLanding() {
   hubLoading?.setAttribute('hidden', '');
   tools?.setAttribute('hidden', '');
+  layersBar?.setAttribute('hidden', '');
   landing?.removeAttribute('hidden');
+}
+
+/**
+ * Pinta las pestañas a partir de las tarjetas que HAN QUEDADO visibles, nunca
+ * calculándolas aparte desde el rol: dos fuentes de verdad acabarían enseñando
+ * una pestaña vacía, o una que aparece al simular un rol que no la tiene.
+ */
+function showLayers({ canAdmin }) {
+  if (!tabsBox || !layersBar) return;
+  const conTarjetas = [...(tools?.querySelectorAll('[data-layer]:not([hidden])') ?? [])]
+    .map((card) => card.dataset.layer);
+  const { visible, tabs } = layerTabs({ layersWithCards: conTarjetas });
+  const activa = activeTab({ layersWithCards: conTarjetas, remembered: sessionStorage.getItem(TAB_FLAG) });
+  const conPestana = new Set(tabs.map((t) => t.id));
+
+  for (const boton of tabsBox.querySelectorAll('button')) {
+    boton.toggleAttribute('hidden', !visible || !conPestana.has(boton.dataset.layer));
+    boton.setAttribute('aria-selected', String(boton.dataset.layer === activa));
+  }
+  adminLink?.toggleAttribute('hidden', !canAdmin);
+  // La barra entera se oculta si no hay ni pestañas ni enlace: una franja vacía
+  // solo añade ruido y un borde que no separa nada.
+  layersBar.toggleAttribute('hidden', !visible && !canAdmin);
+  aplicarCapa(activa, visible);
+}
+
+// Los listeners se registran UNA vez, no en cada repintado: engancharlos al
+// pintar los duplicaría cada vez que se cambia de vista.
+for (const boton of tabsBox?.querySelectorAll('button') ?? []) {
+  boton.addEventListener('click', () => {
+    const capa = boton.dataset.layer;
+    sessionStorage.setItem(TAB_FLAG, capa);
+    for (const otro of tabsBox?.querySelectorAll('button') ?? []) {
+      otro.setAttribute('aria-selected', String(otro.dataset.layer === capa));
+    }
+    aplicarCapa(capa, true);
+  });
+}
+
+/**
+ * Enseña las tarjetas de una capa. Con las pestañas ocultas —una sola capa— no
+ * se filtra nada: si no hay dónde elegir, esconder sería esconder por esconder.
+ */
+function aplicarCapa(capa, conPestanas) {
+  for (const card of tools?.querySelectorAll('[data-layer]') ?? []) {
+    card.toggleAttribute('data-off-layer', conPestanas && card.dataset.layer !== capa);
+  }
 }
 
 function showTools({ personRef, policies = [], isSuperadmin = false, isLeaderish = false, filterFailed = false }) {
@@ -122,10 +171,6 @@ function showTools({ personRef, policies = [], isSuperadmin = false, isLeaderish
   landing?.setAttribute('hidden', '');
   tools?.removeAttribute('hidden');
   const policyById = new Map(policies.map((p) => [p.toolId, p]));
-  // Tarjetas de gobierno de instancia: solo superadmin.
-  for (const card of tools?.querySelectorAll('[data-admin-only]') ?? []) {
-    card.toggleAttribute('hidden', !isSuperadmin);
-  }
   // Lo personal (RMR-TSK-0459): se ve siempre que haya ficha, sin pasar por la
   // política de audiencia. La política gobierna la herramienta de equipo —llevar
   // los O2O de tu gente—, no el derecho a mirar tus propios datos. Sin ficha no
@@ -136,7 +181,7 @@ function showTools({ personRef, policies = [], isSuperadmin = false, isLeaderish
   // Resto de herramientas: visibles según la política de acceso de cada una
   // (RMR-PCS-0027 · F6). «team» es gestión (no tiene política): la ve quien lidera
   // o gobierna. Las demás, por canUseTool; el superadmin siempre las ve.
-  for (const card of tools?.querySelectorAll('[data-tool-id]:not([data-admin-only]):not([data-personal])') ?? []) {
+  for (const card of tools?.querySelectorAll('[data-tool-id]:not([data-personal])') ?? []) {
     const id = card.dataset.toolId;
     // Fallback de disponibilidad: si no se pudieron cargar persona/políticas, no
     // se filtra (se muestran, como antes de F6); cada herramienta valida su acceso.
@@ -149,4 +194,6 @@ function showTools({ personRef, policies = [], isSuperadmin = false, isLeaderish
     }
     card.toggleAttribute('hidden', !visible);
   }
+  // Las capas van DESPUÉS del filtrado: se derivan de lo que ha quedado visible.
+  showLayers({ canAdmin: isSuperadmin });
 }

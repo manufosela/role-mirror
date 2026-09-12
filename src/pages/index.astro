@@ -2,20 +2,21 @@
 import Base from '../layouts/Base.astro';
 
 /**
- * Landing del framework de gestión. Punto de entrada que lista las herramientas
- * disponibles. Por ahora solo Role Mirror; aquí se irán añadiendo más.
+ * Hub de herramientas, repartido en CAPAS (ADR «Tres capas en el hub»).
+ *
+ * Cada herramienta declara a cuál pertenece:
+ *  - `tribbu`: sirve a cualquier persona de la empresa, sea o no de tecnología.
+ *  - `ingenieria`: no tiene sentido fuera de ingeniería.
+ *
+ * Lo GENÉRICO vive en TRIBBU aunque GREBLA lo use: los Motivators son juegos de
+ * management que usa toda la empresa, y que un manager de ingeniería los use no
+ * los convierte en herramienta de ingeniería.
+ *
+ * La ADMINISTRACIÓN no es una tarjeta ni una pestaña: es un enlace junto a las
+ * pestañas que abre en ventana aparte, porque es gobierno y no uso diario, y
+ * porque su página ya tiene ocho pestañas propias dentro.
  */
 const tools = [
-  {
-    // La administración también se entra desde aquí (RMR-TSK-0460): antes se
-    // llegaba por el conmutador de vistas o por un botón suelto, un camino
-    // distinto al de todo lo demás. Solo la ve quien gobierna la instancia.
-    name: 'Administración',
-    href: '/admin',
-    description: 'El panel: organigrama y roles, personas y accesos, herramientas, catálogos y el framework de carrera.',
-    available: true,
-    adminOnly: true,
-  },
   {
     // Lo personal es una herramienta más, no otra aplicación (RMR-TSK-0459).
     // Va marcada como `personal`: se ve siempre que tengas ficha, sin depender
@@ -23,6 +24,7 @@ const tools = [
     // los del equipo y otra ver los tuyos.
     name: 'Mi espacio',
     href: '/mi-espacio',
+    layer: 'tribbu',
     description: 'Lo tuyo: tu ficha, tu plan de carrera, tu Role Mirror, tus O2O y tus datos. Lo que tu manager y tú miráis juntos.',
     available: true,
     personal: true,
@@ -30,84 +32,98 @@ const tools = [
   {
     name: 'Organigrama',
     href: '/organigrama',
+    layer: 'tribbu',
     description: 'Consulta cómo se organiza la casa, en pirámide invertida (liderazgo afectivo): quien más responsabilidad tiene sostiene desde abajo.',
     available: true,
   },
   {
     name: 'Role Mirror',
     href: '/tools/role-mirror',
+    layer: 'ingenieria',
     description: 'Autodiagnóstico de perfil de ingeniería: cuestionario adaptativo y mapa de competencias.',
     available: true,
   },
   {
     name: 'Equipo',
     href: '/tools/team',
+    layer: 'ingenieria',
     description: 'Seguimiento de equipo en 4 dimensiones, cobertura de roles, bus factor y conversaciones 1:1.',
     available: true,
   },
   {
     name: 'DORA',
     href: '/tools/dora',
+    layer: 'ingenieria',
     description: 'Métricas de entrega a nivel de equipo (lead time, deploy frequency…) desde los repos de la organización.',
     available: true,
   },
   {
     name: 'Flujo (LEAN)',
     href: '/tools/lean',
+    layer: 'ingenieria',
     description: 'Métricas de flujo del equipo desde Linear: throughput, cycle time (p50/p85), WIP y aging. Complementan a DORA.',
     available: true,
   },
   {
     name: 'Mapa de Carrera',
     href: '/tools/career-map',
+    layer: 'ingenieria',
     description: 'Traza tu ruta de crecimiento en una isla de casas (skills, tecnologías, hitos), gamificado.',
     available: true,
   },
   {
     name: 'O2O',
     href: '/tools/o2o',
+    layer: 'tribbu',
     description: 'Gestión de One-to-Ones: guía de temas, formulario previo y (próximamente) registro con IA, acciones y evolución.',
     available: true,
   },
   {
     name: 'Moving Motivators',
     href: '/tools/motivators/moving',
+    layer: 'tribbu',
     description: 'Juego de cartas: ordena qué te mueve en el trabajo (curiosidad, maestría, propósito…). Reflexión personal y resultados de equipo por rondas.',
     available: true,
   },
   {
     name: 'Affective Motivators',
     href: '/tools/motivators/affective',
+    layer: 'tribbu',
     description: 'Juego de cartas: ordena qué necesitas sentir en tu equipo (escucha, confianza, pertenencia…). Reflexión personal y resultados de equipo por rondas.',
     available: true,
   },
   {
     name: 'Marea',
     href: '/marea',
+    layer: 'tribbu',
     description: 'El pulso afectivo de la semana: cómo navegas (energía y ánimo) y cuatro anclas. Un registro al día; resultados del equipo siempre agregados y anónimos.',
     available: true,
   },
   {
     name: 'Retros',
     href: '/retros',
+    layer: 'tribbu',
     description: 'Retrospectivas de equipo (Start/Stop/Continue, +/−/Start/Stop o Barco): notas anónimas, votos y acciones con owner que se arrastran a la siguiente retro hasta cerrarse.',
     available: true,
   },
   {
     name: 'Scrum Poker',
     href: '/poker',
+    layer: 'ingenieria',
     description: 'Estimación en equipo en tiempo real: el manager abre una sesión, cada uno vota una carta en oculto y, cuando todos han votado, se revelan a la vez con la media y el consenso.',
     available: true,
   },
   {
     name: 'Kudos',
     href: '/kudos',
+    layer: 'tribbu',
     description: 'Da las gracias de forma anónima con un mensaje corto (público y/o privado). Cada semana, el muro muestra a las personas agradecidas — sin rankings ni competición.',
     available: true,
   },
   {
     name: 'Encuestas',
     href: '/tools/encuestas',
+    layer: 'tribbu',
     description: 'Encuestas de clima anónimas (eNPS + Q12): crea la encuesta, comparte los enlaces personales y consulta participación y resultados por segmento. Gestión de People.',
     available: true,
   },
@@ -169,11 +185,28 @@ const TOOL_ID: Record<string, string> = {
   </section>
 
 
+  <!-- Capas del hub (ADR «Tres capas en el hub»). Oculta hasta saber quién eres:
+       pintarla antes haría saltar el contenido al resolver la sesión. Las
+       pestañas ORGANIZAN, no protegen: el gate de cada herramienta sigue igual. -->
+  <nav id="hub-layers" class="layers" aria-label="Capas de herramientas" hidden>
+    <!-- Las pestañas se pintan AQUÍ, no desde JavaScript: los estilos de Astro
+         son scoped y no alcanzan a los nodos que crea el cliente, así que un
+         botón creado a mano saldría sin estilo. landing.js solo decide cuáles se
+         ven y cuál está activa. -->
+    <div class="layer-tabs" role="tablist">
+      <button type="button" role="tab" data-layer="tribbu" aria-selected="true" hidden>TRIBBU</button>
+      <button type="button" role="tab" data-layer="ingenieria" aria-selected="false" hidden>Ingeniería</button>
+    </div>
+    <a id="admin-link" class="admin-link" href="/admin" target="_blank" rel="noopener" hidden>
+      🛠️ Administración <span class="ext" aria-hidden="true">↗</span>
+    </a>
+  </nav>
+
   <!-- Herramientas: ocultas por defecto. landing.js las muestra con sesión y acceso. -->
   <section id="tenant-tools" class="tools" hidden>
     {
       tools.map((tool) => (
-        <a class="tool-card" href={tool.href} aria-disabled={!tool.available} data-tool-id={TOOL_ID[tool.href]} data-personal={tool.personal ? 'true' : undefined} data-admin-only={tool.adminOnly ? 'true' : undefined} data-own={tool.personal || tool.adminOnly ? 'true' : undefined}>
+        <a class="tool-card" href={tool.href} aria-disabled={!tool.available} data-tool-id={TOOL_ID[tool.href]} data-layer={tool.layer} data-personal={tool.personal ? 'true' : undefined} data-own={tool.personal ? 'true' : undefined}>
           <h2>{tool.name}</h2>
           <p>{tool.description}</p>
           <span class="cta">Abrir →</span>
@@ -196,6 +229,53 @@ const TOOL_ID: Record<string, string> = {
   .hub-spinner { width: 2rem; height: 2rem; border-radius: 50%; border: 3px solid var(--rm-track, #e9f0f2); border-top-color: var(--rm-accent, #2a9d8f); animation: hub-spin 0.8s linear infinite; }
   @keyframes hub-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .hub-spinner { animation: none; } }
+
+  .layers {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin: 0 0 1.4rem;
+    border-bottom: 1px solid var(--rm-border, #e5e7eb);
+  }
+  .layer-tabs { display: flex; gap: 0.2rem; flex-wrap: wrap; }
+  .layer-tabs button {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    padding: 0.55rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--rm-muted, #5b6b7d);
+    cursor: pointer;
+  }
+  .layer-tabs button:hover { color: var(--rm-text, #111827); }
+  .layer-tabs button[aria-selected='true'] {
+    color: var(--rm-accent, #2a9d8f);
+    border-bottom-color: var(--rm-accent, #2a9d8f);
+  }
+  .layer-tabs button:focus-visible,
+  .admin-link:focus-visible { outline: 2px solid var(--rm-accent, #2a9d8f); outline-offset: 2px; }
+  .admin-link {
+    margin-left: auto;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--rm-border, #d1d5db);
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--rm-text, #111827);
+    text-decoration: none;
+    background: var(--rm-surface, #fff);
+  }
+  .admin-link:hover { border-color: var(--rm-accent, #2a9d8f); color: var(--rm-accent, #2a9d8f); }
+  .admin-link .ext { font-size: 0.78rem; opacity: 0.7; }
+
+  /* Tarjeta de otra capa: fuera de la vista, pero SIN tocar `hidden`, que es de
+     quien filtra por política. Mezclar los dos criterios en el mismo atributo
+     haría que cambiar de pestaña revelara algo que la política ocultó. */
+  .tool-card[data-off-layer] { display: none; }
 
   .hero { margin-bottom: 2rem; }
   .page-tagline {
