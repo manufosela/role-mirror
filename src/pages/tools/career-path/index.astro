@@ -1,0 +1,27 @@
+---
+import Base from '../../../layouts/Base.astro';
+
+/**
+ * CAREER PATH (RMR-TSK-0488): los niveles de la organización y qué se espera en
+ * cada uno. Se veía solo dentro de «Mi espacio › Mi carrera › La escalera», y
+ * para llegar había que saber que estaba ahí dentro. Aquí es una herramienta con
+ * su puerta, y se ve entera al entrar: las expectativas vienen desplegadas,
+ * porque venir a consultar qué implica un nivel y encontrarlo plegado es el
+ * mismo recoveco con otra forma.
+ */
+---
+
+<Base title="GREBLA — Career path" requireAuth={true}>
+  <tool-nav href="/" name="Career path" icon="🪜"></tool-nav>
+  <p class="page-lead">
+    Todos los niveles de la organización y qué se espera en cada uno, dimensión a
+    dimensión. Es la referencia que se mira antes de una promoción, de un 1:1 de
+    desarrollo o de decidir a qué aspirar.
+  </p>
+
+  <career-ladder open></career-ladder>
+</Base>
+
+<script>
+  import '../../../client/career-path.js';
+</script>
