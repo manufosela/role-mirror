@@ -17,7 +17,7 @@
  * La lógica pura —validar claves, agrupar, rotular— vive en
  * src/tools/team/domain/domains.js; aquí solo está la IO.
  */
-import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc, addDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDocs, getDocsFromServer, setDoc, updateDoc, deleteDoc, addDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase.js';
 
 const DOMAINS = 'domains';
@@ -27,11 +27,22 @@ const SUBDOMAINS = 'subdomains';
 const rows = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
 /**
+ * El catálogo se lee SIEMPRE del servidor, saltándose la caché local
+ * (RMR-BUG-0112). Con estos datos se valida que una clave no esté repetida, y
+ * la clave es la identidad de la entidad para el resto de sistemas: validar
+ * contra una copia vieja dejaría crear un duplicado, que es lo único que este
+ * modelo no puede permitirse. Son nueve documentos y se miran en una pantalla
+ * de administración, así que el viaje no le cuesta a nadie.
+ * @param {string} col
+ */
+const fromServer = (col) => getDocsFromServer(collection(db, col));
+
+/**
  * Catálogo de dominios, ordenado por nombre.
  * @returns {Promise<Array<{ id: string, key: string, name: string, channel?: string }>>}
  */
 export async function listDomains() {
-  return rows(await getDocs(collection(db, DOMAINS)))
+  return rows(await fromServer(DOMAINS))
     .toSorted((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'es'));
 }
 
@@ -41,7 +52,7 @@ export async function listDomains() {
  *   linearProject?: string, githubTeam?: string }>>}
  */
 export async function listSubdomains() {
-  return rows(await getDocs(collection(db, SUBDOMAINS)))
+  return rows(await fromServer(SUBDOMAINS))
     .toSorted((a, b) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'es'));
 }
 

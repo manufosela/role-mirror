@@ -9,7 +9,7 @@ import {
   onAuthStateChanged,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { auth, db, googleProvider } from './firebase.js';
+import { auth, db, googleProvider, forgetCachedData } from './firebase.js';
 
 /**
  * Registra la presencia del usuario en /users/{uid} (directorio de quién ha
@@ -65,9 +65,21 @@ export async function signInWithGoogle() {
   return credential.user;
 }
 
-/** Cierra la sesión actual. @returns {Promise<void>} */
-export function signOutUser() {
-  return signOut(auth);
+/**
+ * Cierra la sesión actual y OLVIDA lo cacheado en este dispositivo.
+ *
+ * El orden importa: primero se cierra la sesión —que es lo que el usuario ha
+ * pedido y no puede fallar por nada— y después se limpia la caché. Al revés, un
+ * fallo al limpiar dejaría la sesión abierta.
+ * @returns {Promise<void>}
+ */
+export async function signOutUser() {
+  await signOut(auth);
+  await forgetCachedData();
+  // Limpiar la caché deja la instancia de Firestore terminada e inservible, así
+  // que se vuelve a casa con la página recargada. Al cerrar sesión es además lo
+  // que se espera: salir, no quedarse en una pantalla que ya no es tuya.
+  globalThis.location.assign('/');
 }
 
 /**

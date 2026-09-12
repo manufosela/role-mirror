@@ -37,6 +37,8 @@ export class DomainsManager extends LitElement {
     _error: { state: true },
     _notice: { state: true },
     _busy: { state: true },
+    /** ¿Está el catálogo en la mano? Sin él no se puede validar la unicidad. */
+    _cargado: { state: true },
   };
 
   static styles = [noteStyles, css`
@@ -94,6 +96,7 @@ export class DomainsManager extends LitElement {
     this._error = '';
     this._notice = '';
     this._busy = false;
+    this._cargado = false;
     this._loaded = false;
   }
 
@@ -109,6 +112,7 @@ export class DomainsManager extends LitElement {
       const [domains, subdomains] = await Promise.all([listDomains(), listSubdomains()]);
       this._domains = domains;
       this._subdomains = subdomains;
+      this._cargado = true;
     } catch {
       this._error = 'No se pudo cargar el catálogo de dominios.';
     }
@@ -139,6 +143,10 @@ export class DomainsManager extends LitElement {
   }
 
   async _addDomain() {
+    // Sin catálogo no se crea nada: validar la unicidad de la clave contra una
+    // lista vacía la daría por libre SIEMPRE, y dos entidades con la misma clave
+    // son indistinguibles para el resto de sistemas.
+    if (!this._cargado) return;
     const name = this._newDomain.trim();
     const key = this._newDomainKey.trim();
     if (!name) { this._error = 'El dominio necesita un nombre.'; return; }
@@ -161,6 +169,7 @@ export class DomainsManager extends LitElement {
   }
 
   async _addSubdomain(domain) {
+    if (!this._cargado) return;
     const name = String(this._newSub[domain.key] ?? '').trim();
     if (!name) { this._error = 'El subdominio necesita un nombre.'; return; }
     const key = suggestKey(name);
@@ -245,7 +254,8 @@ export class DomainsManager extends LitElement {
         ${this.readOnly ? null : html`<div class="row">
           <input type="text" placeholder="Nuevo subdominio" .value=${this._newSub[domain.key] ?? ''}
             @input=${(e) => { this._newSub = { ...this._newSub, [domain.key]: e.target.value }; }} />
-          <button ?disabled=${this._busy} @click=${() => this._addSubdomain(domain)}>Añadir subdominio</button>
+          <button ?disabled=${this._busy || !this._cargado}
+            @click=${() => this._addSubdomain(domain)}>Añadir subdominio</button>
         </div>`}
       </article>`;
   }
@@ -276,7 +286,8 @@ export class DomainsManager extends LitElement {
           @input=${(e) => this._onNewDomainName(e.target.value)} />
         <input class="key-input" type="text" placeholder="clave" .value=${this._newDomainKey}
           @input=${(e) => { this._newDomainKey = e.target.value; }} />
-        <button class="primary" ?disabled=${this._busy} @click=${() => this._addDomain()}>Añadir dominio</button>
+        <button class="primary" ?disabled=${this._busy || !this._cargado}
+          @click=${() => this._addDomain()}>Añadir dominio</button>
       </div>
       <p class="muted">Nace con su «${CORE_NAME}»: las métricas siempre cuelgan de un subdominio.</p>`;
   }
