@@ -52,22 +52,36 @@ async function conEscalera(fn) {
   }
 }
 
-test('el career path se ve entero al entrar, sin pasos intermedios', async ({ page }) => {
+test('abre con la lista de niveles a la vista, y todos colapsados', async ({ page }) => {
   await conEscalera(async () => {
     await signInAs(page, 'engineer');
     await page.goto('/tools/career-path');
 
-    // Sin pestañas ni desplegables: los niveles están a la vista.
     await expect(page.locator('tool-nav')).toContainText('Career path');
     await expect(page.getByRole('heading', { name: 'Individual Contributor' })).toBeVisible();
+    // Todos los niveles se ven de un vistazo…
     const codigos = await page.locator('career-ladder .rung .code').allInnerTexts();
     expect(codigos).toEqual(['L1', 'L2']);
-    // Y lo que implica cada uno, DESPLEGADO: venir a consultar qué implica un
-    // nivel y encontrarlo plegado es el mismo recoveco con otra forma.
-    await expect(page.locator('career-ladder .rung').first()).toContainText('Técnica');
-    await expect(page.locator('career-ladder details.fold').first()).toHaveAttribute('open', '');
-    await expect(page.locator('career-ladder .fold-body').first())
-      .toHaveText('Escribe código que otros leen.');
+    // …y ninguno viene desplegado: con los doce abiertos, la página es un muro.
+    await expect(page.locator('career-ladder .rung[open]')).toHaveCount(0);
+    await expect(page.locator('career-ladder .exp-text')).toBeHidden();
+  });
+});
+
+test('el detalle se despliega al nivel que quieras, y sale entero', async ({ page }) => {
+  await conEscalera(async () => {
+    await signInAs(page, 'engineer');
+    await page.goto('/tools/career-path');
+
+    await page.locator('career-ladder .rung', { hasText: 'L1' }).first().locator('summary').click();
+
+    const l1 = page.locator('career-ladder .rung', { hasText: 'L1' }).first();
+    await expect(l1).toHaveAttribute('open', '');
+    // Sin otro plegado dentro: la dimensión y su texto, a la vista.
+    await expect(l1.getByText('Técnica')).toBeVisible();
+    await expect(l1.locator('.exp-text')).toHaveText('Escribe código que otros leen.');
+    // Y el de al lado sigue cerrado: se abre lo que se pide, no todo.
+    await expect(page.locator('career-ladder .rung', { hasText: 'L2' })).not.toHaveAttribute('open', '');
   });
 });
 

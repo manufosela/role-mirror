@@ -56,10 +56,13 @@ test('la escalera enseña todos los itinerarios y niveles, no solo el tuyo', asy
     const codigos = await page.locator('engineer-space .rung .code').allInnerTexts();
     expect(codigos).toEqual(['L1', 'L2', 'M1']);
 
-    // Con lo que hace falta para decidir: qué es y a quién describe.
+    // En la lista, lo justo para elegir: código, título y a quién describe.
     const l2 = page.locator('engineer-space .rung', { hasText: 'Senior Engineer' });
-    await expect(l2).toContainText('Dueño de decisiones no triviales');
     await expect(l2).toContainText('5+ años');
+    // El detalle, al desplegarlo (RMR-TSK-0492): con los doce niveles abiertos
+    // de golpe no se ve nada.
+    await l2.locator('summary').click();
+    await expect(l2).toContainText('Dueño de decisiones no triviales');
     await expect(l2.getByText('Impacto')).toBeVisible();
   });
 });
