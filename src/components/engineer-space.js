@@ -40,12 +40,13 @@ import './career/career-progression-chart.js';
 import './role-result.js';
 import './role-questionnaire.js';
 import './career/career-map.js';
+import './career/career-ladder.js';
 import './career/player-card.js';
 import './marea/marea-app.js';
 import './kudos/kudos-app.js';
 import './retro/retro-app.js';
 import './my-ficha-editor.js';
-import { getLevel, expectationsForLevel, addendumsForDisciplines, aspirationalLevels, composeTitle, careerLadder } from '../tools/career/data/framework.js';
+import { getLevel, expectationsForLevel, addendumsForDisciplines, aspirationalLevels, composeTitle } from '../tools/career/data/framework.js';
 import { stats } from '../tools/career/application/usecases.js';
 import { archipelagoProgress } from '../tools/career/domain/citizenship.js';
 import { setCareerTarget, getPersonLogbook } from '../lib/engineer.js';
@@ -217,28 +218,8 @@ export class EngineerSpace extends LitElement {
     /* ── Ítems plegables (expectativas y addendums) ── */
     .fold { border-top: 1px solid var(--rm-border, #eef0f2); }
 
-    /* La escalera (RMR-TSK-0471): un bloque por itinerario y un peldaño por
-       nivel. El peldaño propio se marca con el acento, no con un color nuevo. */
-    .ladder-intro { font-size: 0.85rem; color: var(--rm-muted, #5b6b7d); margin: 0 0 1rem; }
-    .track { margin: 0 0 1.6rem; }
-    .track h3 { font-size: 0.95rem; margin: 0 0 0.15rem; color: var(--rm-text, #111827); }
-    .track-desc { font-size: 0.82rem; color: var(--rm-muted, #5b6b7d); margin: 0 0 0.7rem; }
-    .rung {
-      border: 1px solid var(--rm-border, #e5e7eb); border-radius: 10px;
-      padding: 0.7rem 0.9rem; margin: 0 0 0.6rem; background: var(--rm-surface, #fff);
-    }
-    .rung.mine { border-color: var(--rm-accent, #2a9d8f); border-left-width: 4px; }
-    .rung header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
-    .rung .code { font-weight: 800; color: var(--rm-accent, #2a9d8f); font-size: 0.9rem; }
-    .rung .title { font-weight: 700; font-size: 0.9rem; }
-    .rung .mark {
-      font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
-      color: var(--rm-on-accent, #fff); background: var(--rm-accent, #2a9d8f);
-      border-radius: 999px; padding: 0.1rem 0.5rem;
-    }
-    .rung .profile { font-size: 0.78rem; color: var(--rm-muted, #5b6b7d); margin-left: auto; }
-    .rung .desc { font-size: 0.85rem; margin: 0.35rem 0 0.5rem; }
-    .rung .exps { border-top: 1px solid var(--rm-border, #eef0f2); }
+    /* Los estilos de la escalera se fueron con career-ladder (RMR-TSK-0488).
+       Los de fold se quedan: los usan las expectativas del nivel propio. */
     .fold summary { cursor: pointer; padding: 0.45rem 0; font-size: 0.85rem; }
     .fold summary::-webkit-details-marker { color: var(--rm-muted, #5b6b7d); }
     .fold summary:focus-visible { outline: 2px solid var(--rm-accent, #2a9d8f); outline-offset: 2px; border-radius: 4px; }
@@ -647,50 +628,12 @@ export class EngineerSpace extends LitElement {
    * preguntar. Se marca dónde estás y, si lo has declarado, a dónde vas.
    */
   _renderLadder() {
-    const escalera = careerLadder(this.framework);
-    if (escalera.length === 0) {
-      return html`<p class="empty">El framework de carrera aún no está configurado.</p>`;
-    }
-    const miNivel = this.person?.levelId ?? null;
-    const miObjetivo = this.person?.careerTargetLevelId ?? null;
-    return html`
-      <p class="ladder-intro">
-        Todos los itinerarios y sus niveles, con lo que se espera en cada dimensión.
-        Tu nivel actual va marcado${miObjetivo ? ' y tu objetivo también' : ''}.
-      </p>
-      ${escalera.map(({ track, levels }) => html`
-        <section class="track">
-          <h3>${track.name}</h3>
-          ${track.description ? html`<p class="track-desc">${track.description}</p>` : null}
-          ${levels.map((l) => this._renderLadderLevel(l, miNivel, miObjetivo))}
-        </section>`)}
-    `;
+    // La escalera vive en <career-ladder>, que también es la herramienta propia
+    // (RMR-TSK-0488): aquí se reutiliza para que el contenido no esté en dos
+    // sitios distintos que se desincronicen.
+    return html`<career-ladder .framework=${this.framework} .person=${this.person}></career-ladder>`;
   }
 
-  /** Un peldaño de la escalera. */
-  _renderLadderLevel(l, miNivel, miObjetivo) {
-    const marca = this._ladderMark(l.id, miNivel, miObjetivo);
-    return html`
-      <article class="rung ${marca ? 'mine' : ''}">
-        <header>
-          <span class="code">${l.code}</span>
-          <span class="title">${l.title}</span>
-          ${marca ? html`<span class="mark">${marca}</span>` : null}
-          ${l.typicalProfile ? html`<span class="profile">${l.typicalProfile}</span>` : null}
-        </header>
-        ${l.description ? html`<p class="desc">${l.description}</p>` : null}
-        ${l.expectations.length > 0
-          ? html`<div class="exps">${l.expectations.map((e) => this._fold(e.dimension.name, e.text))}</div>`
-          : html`<p class="empty">Sin expectativas escritas todavía.</p>`}
-      </article>`;
-  }
-
-  /** Etiqueta de «estás aquí» / «vas aquí», o null. Sin ternarios anidados. */
-  _ladderMark(levelId, miNivel, miObjetivo) {
-    if (levelId === miNivel) return 'Estás aquí';
-    if (levelId === miObjetivo) return 'Tu objetivo';
-    return null;
-  }
 
   _renderCareer() {
     const fw = this.framework;
