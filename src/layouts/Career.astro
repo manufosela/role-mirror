@@ -1,17 +1,18 @@
 ---
 /**
- * Layout del Mapa de Carrera. Envuelve Base y marca la ruta como protegida.
+ * Layout del Plan de desarrollo (el juego de carrera). Envuelve Base y marca
+ * la ruta como protegida.
  * Props: title
  */
 import Base from './Base.astro';
 
-const { title = 'Mapa de Carrera' } = Astro.props;
+const { title = 'Plan de desarrollo' } = Astro.props;
 ---
 
 <Base title={title} requireAuth={true}>
-  <nav class="tool-nav" aria-label="Mapa de Carrera">
+  <nav class="tool-nav" aria-label="Plan de desarrollo">
     <a href="/" class="tool-back">← Volver</a>
-    <span class="tool-name">◇ Mapa de Carrera</span>
+    <span class="tool-name">◇ Plan de desarrollo</span>
   </nav>
   <slot />
 </Base>

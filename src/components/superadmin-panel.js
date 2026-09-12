@@ -1700,8 +1700,8 @@ export class SuperadminPanel extends LitElement {
   _renderCareerMap() {
     if (this.readOnly) {
       return html`<section>
-        <h2>Mapa de carrera</h2>
-        <p class="ro-note">El editor del mapa de carrera es solo para superadmin.</p>
+        <h2>Plan de desarrollo</h2>
+        <p class="ro-note">El editor del plan de desarrollo es solo para superadmin.</p>
       </section>`;
     }
     return html`<game-editor .ready=${this.ready} .embedded=${true}></game-editor>`;

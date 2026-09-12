@@ -180,7 +180,7 @@ function showNoFicha(user) {
   for (const item of [
     'Carrera — su nivel y disciplinas según el framework',
     'Mi Role Mirror — su autodiagnóstico de perfil (lo edita él)',
-    'Mapa de carrera — su ruta de crecimiento gamificada',
+    'Plan de desarrollo — su ruta de crecimiento gamificada',
     'Mis O2O — resúmenes y acciones de sus one-to-ones',
     'Marea — su pulso afectivo semanal (privado)',
     'Retros — participa en las retrospectivas de su equipo',
