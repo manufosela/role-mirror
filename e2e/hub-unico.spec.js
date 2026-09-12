@@ -50,35 +50,23 @@ test('en Mi espacio solo está lo personal, sin duplicar las cards del hub', asy
   }
 });
 
-test('la administración es una card del hub, la primera y solo para quien gobierna', async ({ page }) => {
+test('la administración es un enlace junto a las pestañas, y abre aparte', async ({ page }) => {
+  // Ya no es una tarjeta del hub (ADR «Tres capas en el hub»): es gobierno, no
+  // uso diario, y su página tiene ocho pestañas propias dentro.
   await signInAs(page, 'superadmin');
   await page.goto('/');
-  const admin = page.locator('[data-admin-only]');
+  const admin = page.locator('#admin-link');
   await expect(admin).toBeVisible();
   await expect(admin).toContainText('Administración');
-  // La primera de la rejilla: es la puerta de quien gobierna.
-  const primera = page.locator('#tenant-tools a.tool-card:not([hidden])').first();
-  await expect(primera).toHaveAttribute('data-admin-only', 'true');
+  await expect(admin).toHaveAttribute('target', '_blank');
+  // Y no queda ninguna tarjeta de gobierno suelta en la rejilla.
+  await expect(page.locator('#tenant-tools [data-admin-only]')).toHaveCount(0);
 });
 
-test('un ingeniero no ve la card de administración por ninguna parte', async ({ page }) => {
+test('un ingeniero no ve la administración por ninguna parte', async ({ page }) => {
   await signInAs(page, 'engineer');
   await page.goto('/');
-  await expect(page.locator('[data-admin-only]')).toBeHidden();
-});
-
-test('entrar al panel por su card deja la vista en «Admin»', async ({ page }) => {
-  await signInAs(page, 'superadmin');
-  await page.goto('/');
-  // La card de administración solo se ofrece en la vista de admin: desde
-  // «Manager», «Ingeniero» o «Empleado» el hub se pinta como lo vería ese rol,
-  // y se sale por el conmutador de la cabecera (RMR-BUG-0104).
-  await page.locator('[data-admin-only]').click();
-  await expect(page).toHaveURL(/\/admin/);
-
-  // Queda anotada la vista: al volver al hub el conmutador marca «Admin». Antes
-  // no se anotaba ninguna y, deducida de la ruta, marcaba «Manager».
-  expect(await page.evaluate(() => sessionStorage.getItem('grebla-view'))).toBe('admin');
+  await expect(page.locator('#admin-link')).toBeHidden();
 });
 
 test('el panel tiene su «Volver» al hub', async ({ page }) => {

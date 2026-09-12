@@ -33,7 +33,7 @@ test('la vista de ingeniero enseña el hub, no desvía a Mi espacio', async ({ p
     // Lo personal sigue estando: como card del hub, igual que para todos.
     await expect(page.locator('[data-personal]')).toBeVisible();
     // La administración no, porque un ingeniero no la ve.
-    await expect(page.locator('[data-admin-only]:not([hidden])')).toHaveCount(0);
+    await expect(page.locator('#admin-link:not([hidden])')).toHaveCount(0);
   });
 });
 
@@ -54,26 +54,32 @@ test('«Volver» desde Mi espacio devuelve al hub, no a Mi espacio', async ({ pa
   });
 });
 
-test('al volver de Administración la vista sigue siendo Admin, no Manager', async ({ page }) => {
-  await signInAs(page, 'superadmin');
-  await page.goto('/');
-
-  await page.locator('[data-admin-only]').click();
-  await expect(page).toHaveURL(/\/admin/);
-  await page.getByRole('link', { name: '← Volver' }).click();
-
-  await expect(page).toHaveURL(/\/$/);
-  await expect(vista(page, 'Admin (superadmin)')).toHaveAttribute('aria-pressed', 'true');
-  await expect(vista(page, 'Manager')).toHaveAttribute('aria-pressed', 'false');
-});
-
-test('la vista de admin también se queda en el hub, con su card', async ({ page }) => {
+test('abrir Administración no cambia la vista de la ventana en la que estabas', async ({ page }) => {
+  // La administración abre en ventana aparte: no has cambiado de vista, has
+  // abierto otra cosa. Antes era una tarjeta que navegaba aquí mismo y había
+  // que anotar la vista para que al volver no marcara «Manager» (RMR-BUG-0104).
   await signInAs(page, 'superadmin');
   await page.goto('/');
   await vista(page, 'Manager').click();
-  await expect(page.locator('[data-admin-only]:not([hidden])')).toHaveCount(0);
+
+  await expect(page.locator('#admin-link')).toBeHidden();
+  await vista(page, 'Admin (superadmin)').click();
+  const enlace = page.locator('#admin-link');
+  await expect(enlace).toBeVisible();
+  await expect(enlace).toHaveAttribute('target', '_blank');
+
+  await enlace.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(vista(page, 'Admin (superadmin)')).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('la vista de admin también se queda en el hub, con su enlace', async ({ page }) => {
+  await signInAs(page, 'superadmin');
+  await page.goto('/');
+  await vista(page, 'Manager').click();
+  await expect(page.locator('#admin-link:not([hidden])')).toHaveCount(0);
 
   await vista(page, 'Admin (superadmin)').click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.locator('[data-admin-only]')).toBeVisible();
+  await expect(page.locator('#admin-link')).toBeVisible();
 });
