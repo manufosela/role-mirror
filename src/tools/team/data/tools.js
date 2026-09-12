@@ -15,6 +15,7 @@ export const TOOLS = [
   { toolId: 'kudos', label: 'Kudos', audience: { everyone: true }, managedBy: {} },
   { toolId: 'library', label: 'Biblioteca de la bodega', audience: { everyone: true }, managedBy: {} },
   { toolId: 'career', label: 'Mapa de carrera', audience: { branches: ['engineering'] }, managedBy: { roleIds: ['head-eng'] } },
+  { toolId: 'careerpath', label: 'Career path', audience: { branches: ['engineering'] }, managedBy: { roleIds: ['head-eng'] } },
   { toolId: 'rolemirror', label: 'Role Mirror', audience: { branches: ['engineering'] }, managedBy: { roleIds: ['head-eng'] } },
   { toolId: 'dora', label: 'DORA', audience: { branches: ['engineering'] }, managedBy: { roleIds: ['head-eng'] } },
   { toolId: 'lean', label: 'LEAN', audience: { branches: ['engineering'] }, managedBy: { roleIds: ['head-eng'] } },

@@ -19,6 +19,13 @@ export class CareerLadder extends LitElement {
   static properties = {
     framework: { attribute: false },
     person: { attribute: false },
+    /**
+     * Expectativas desplegadas de entrada. En la herramienta sí: se viene a
+     * consultar qué implica cada nivel, y encontrarlo plegado es el mismo
+     * recoveco con otra forma. Dentro de «Mi carrera» no, porque ahí la
+     * escalera acompaña a otras cosas y ocuparía la pantalla entera.
+     */
+    open: { type: Boolean },
   };
 
   static styles = css`
@@ -66,6 +73,7 @@ export class CareerLadder extends LitElement {
     super();
     this.framework = null;
     this.person = null;
+    this.open = false;
   }
 
   render() {
@@ -132,7 +140,7 @@ export class CareerLadder extends LitElement {
         </div>`;
     }
     return html`
-      <details class="fold">
+      <details class="fold" ?open=${this.open}>
         <summary><span class="dim">${name}</span></summary>
         <p class="fold-body">${text}</p>
       </details>`;

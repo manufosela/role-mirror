@@ -72,6 +72,17 @@ const tools = [
     available: true,
   },
   {
+    // El career path ya se veía dentro de «Mi espacio › Mi carrera», pero había
+    // que saber que estaba ahí: es la referencia que se consulta antes de una
+    // promoción o de un 1:1, así que tiene su propia puerta. NO se quita de Mi
+    // espacio: esto se añade (RMR-TSK-0488).
+    name: 'Career path',
+    href: '/tools/career-path',
+    description: 'Todos los niveles de la organización y qué se espera en cada uno, dimensión a dimensión. La referencia para saber a qué aspirar y qué implica cada peldaño.',
+    available: true,
+    layer: 'ingenieria',
+  },
+  {
     name: 'O2O',
     href: '/tools/o2o',
     layer: 'tribbu',
@@ -141,6 +152,7 @@ const TOOL_ID: Record<string, string> = {
   '/tools/dora': 'dora',
   '/tools/lean': 'lean',
   '/tools/career-map': 'career',
+  '/tools/career-path': 'careerpath',
   '/tools/o2o': 'o2o',
   '/tools/motivators/moving': 'motivators',
   '/tools/motivators/affective': 'motivators',
