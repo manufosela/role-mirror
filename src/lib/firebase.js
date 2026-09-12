@@ -8,7 +8,10 @@
  */
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, connectAuthEmulator, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import {
+  initializeFirestore, getFirestore, connectFirestoreEmulator,
+  persistentLocalCache, persistentMultipleTabManager, clearIndexedDbPersistence, terminate,
+} from 'firebase/firestore';
 
 /** ¿Se apunta a los emuladores? Solo en E2E; en producción NUNCA (env apagada). */
 const useEmulators = import.meta.env.PUBLIC_USE_EMULATORS === 'true';
@@ -37,12 +40,98 @@ function readConfig() {
   return config;
 }
 
+/**
+ * Bandera de «queda caché por borrar». La deja el cierre de sesión cuando no
+ * puede limpiar en caliente —pasa si hay otra pestaña con la base abierta— y se
+ * salda AQUÍ, en el arranque siguiente, antes de que Firestore abra nada.
+ *
+ * Sin esto, un fallo al limpiar dejaba fichas de personas en el disco de un
+ * ordenador compartido, y el aviso se quedaba en la consola donde no lo ve
+ * nadie (RMR-BUG-0112).
+ */
+const CACHE_SUCIA = 'grebla-cache-por-borrar';
+
+/** Borra las bases de Firestore a pelo. Aquí se puede: aún no hay nada abierto. */
+async function limpiezaPendiente() {
+  if (typeof indexedDB === 'undefined' || localStorage.getItem(CACHE_SUCIA) !== '1') return;
+  try {
+    const bases = await indexedDB.databases();
+    const resultados = await Promise.all(bases
+      .map((b) => b.name ?? '')
+      .filter((nombre) => nombre.includes('firestore'))
+      .map((nombre) => new Promise((resolve) => {
+        const req = indexedDB.deleteDatabase(nombre);
+        // `blocked` es el caso de la otra pestaña, que sigue con la base
+        // abierta: cuenta como NO borrada.
+        req.onsuccess = () => resolve(true);
+        req.onerror = () => resolve(false);
+        req.onblocked = () => resolve(false);
+      })));
+    // La bandera solo se retira si se borró TODO. Si una quedó bloqueada y se
+    // retirara igual, los datos se quedarían en el disco para siempre y nadie
+    // volvería a intentarlo — justo lo contrario de para lo que está.
+    if (resultados.every(Boolean)) localStorage.removeItem(CACHE_SUCIA);
+  } catch {
+    // Si ni siquiera se puede enumerar, la bandera se queda y se reintenta.
+  }
+}
+await limpiezaPendiente();
+
 // Reutiliza la app si ya estaba inicializada (HMR / múltiples imports).
 const app = getApps().length > 0 ? getApp() : initializeApp(readConfig());
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+/**
+ * Firestore con CACHÉ PERSISTENTE (RMR-BUG-0112).
+ *
+ * Por defecto el SDK web cachea en memoria, y la memoria se va con la pestaña:
+ * cada recarga volvía a pedir por red hasta el último documento, y por eso la
+ * segunda visita tardaba lo mismo que la primera. Con la caché en IndexedDB, lo
+ * ya visto se pinta al instante desde el disco y se refresca por detrás.
+ *
+ * `persistentMultipleTabManager` porque la app se usa con varias pestañas
+ * abiertas —el panel en una, la herramienta en otra— y sin él la persistencia
+ * se desactiva en todas menos en la primera, en silencio.
+ *
+ * Lo que queda en el disco son datos de personas, así que al cerrar sesión se
+ * borra: ver `forgetCachedData()`, que llama el cierre de sesión.
+ */
+export const db = getApps().length > 1
+  ? getFirestore(app)
+  : initializeFirestore(app, {
+    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  });
+
 export const googleProvider = new GoogleAuthProvider();
+
+/**
+ * Borra la caché local de Firestore. Se llama al cerrar sesión: lo cacheado son
+ * fichas de personas, niveles y O2O, y en un ordenador compartido el siguiente
+ * que entrara se encontraría con los datos del anterior servidos desde disco.
+ *
+ * El `terminate` NO es opcional: el SDK solo deja limpiar antes de inicializar
+ * o después de terminar, y sin él la llamada falla y la caché se queda entera
+ * —con la falsa sensación de haberla borrado—. Después de esto la instancia ya
+ * no sirve, así que quien lo llama debe recargar.
+ *
+ * Falla en silencio A PROPÓSITO y solo aquí: si otra pestaña tiene la base
+ * abierta, el SDK se niega a borrar, y eso no puede impedir que alguien cierre
+ * su sesión. Queda anotado en la consola para que no sea invisible del todo.
+ * @returns {Promise<void>}
+ */
+export async function forgetCachedData() {
+  // La bandera se pone ANTES de intentarlo: si el intento falla —otra pestaña
+  // con la base abierta— queda constancia y el siguiente arranque la salda.
+  localStorage.setItem(CACHE_SUCIA, '1');
+  try {
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+    localStorage.removeItem(CACHE_SUCIA);
+  } catch (err) {
+    console.warn('[firebase] la caché local se borrará al volver a abrir (¿otra pestaña?):', err);
+  }
+}
 
 /**
  * Instancia de Cloud Functions de la región, conectada al emulador cuando toca.
