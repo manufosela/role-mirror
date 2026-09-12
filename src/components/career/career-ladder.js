@@ -19,13 +19,6 @@ export class CareerLadder extends LitElement {
   static properties = {
     framework: { attribute: false },
     person: { attribute: false },
-    /**
-     * Expectativas desplegadas de entrada. En la herramienta sí: se viene a
-     * consultar qué implica cada nivel, y encontrarlo plegado es el mismo
-     * recoveco con otra forma. Dentro de «Mi carrera» no, porque ahí la
-     * escalera acompaña a otras cosas y ocuparía la pantalla entera.
-     */
-    open: { type: Boolean },
   };
 
   static styles = css`
@@ -40,10 +33,26 @@ export class CareerLadder extends LitElement {
     .track-desc { font-size: 0.82rem; color: var(--rm-muted, #5b6b7d); margin: 0 0 0.7rem; }
     .rung {
       border: 1px solid var(--rm-border, #e5e7eb); border-radius: 10px;
-      padding: 0.7rem 0.9rem; margin: 0 0 0.6rem; background: var(--rm-surface, #fff);
+      margin: 0 0 0.4rem; background: var(--rm-surface, #fff);
     }
     .rung.mine { border-color: var(--rm-accent, #2a9d8f); border-left-width: 4px; }
-    .rung header { display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap; }
+    .rung > summary {
+      display: flex; align-items: baseline; gap: 0.5rem; flex-wrap: wrap;
+      padding: 0.6rem 0.9rem; cursor: pointer; border-radius: 10px;
+    }
+    .rung > summary:focus-visible { outline: 2px solid var(--rm-accent, #2a9d8f); outline-offset: 2px; }
+    /* Con el summary en flex, Chrome esconde el marcador nativo y la fila
+       parece muerta: se pone uno propio para que se vea que abre. */
+    .rung > summary::-webkit-details-marker { display: none; }
+    .rung > summary::marker { content: ''; }
+    .chev {
+      color: var(--rm-muted, #5b6b7d); font-weight: 700; line-height: 1;
+      transition: transform 0.15s ease-out; display: inline-block;
+    }
+    .rung[open] > summary .chev { transform: rotate(90deg); }
+    @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+    .rung[open] > summary { border-bottom: 1px solid var(--rm-border, #eef0f2); border-radius: 10px 10px 0 0; }
+    .detail { padding: 0.6rem 0.9rem 0.8rem; }
     .rung .code { font-weight: 800; color: var(--rm-accent, #2a9d8f); font-size: 0.9rem; }
     .rung .title { font-weight: 700; font-size: 0.9rem; }
     .rung .mark {
@@ -52,19 +61,14 @@ export class CareerLadder extends LitElement {
       border-radius: 999px; padding: 0.1rem 0.5rem;
     }
     .rung .profile { font-size: 0.78rem; color: var(--rm-muted, #5b6b7d); margin-left: auto; }
-    .rung .desc { font-size: 0.85rem; margin: 0.35rem 0 0.5rem; }
-    .rung .exps { border-top: 1px solid var(--rm-border, #eef0f2); }
-
-    .fold { border-top: 1px solid var(--rm-border, #eef0f2); }
-    .fold summary { cursor: pointer; padding: 0.45rem 0; font-size: 0.85rem; }
-    .fold summary::-webkit-details-marker { color: var(--rm-muted, #5b6b7d); }
-    .fold summary:focus-visible { outline: 2px solid var(--rm-accent, #2a9d8f); outline-offset: 2px; border-radius: 4px; }
-    .fold .dim { font-weight: 700; }
-    .fold-body { font-size: 0.83rem; color: var(--rm-text, #111827); margin: 0.1rem 0 0.5rem; padding-left: 1.1rem; }
-    .fold-empty { display: flex; gap: 0.4rem; align-items: baseline; padding: 0.45rem 0; font-size: 0.85rem; }
-    .fold-empty .todo { color: var(--rm-muted, #5b6b7d); font-style: italic; }
+    .rung .desc { font-size: 0.85rem; margin: 0 0 0.7rem; }
+    .exps { display: grid; gap: 0.5rem; }
+    .exp { border-top: 1px solid var(--rm-border, #eef0f2); padding-top: 0.45rem; }
+    .exp .dim { font-weight: 700; font-size: 0.83rem; }
+    .exp-text { font-size: 0.83rem; color: var(--rm-text, #111827); margin: 0.15rem 0 0; }
+    .exp .todo { color: var(--rm-muted, #5b6b7d); font-style: italic; font-size: 0.83rem; margin-left: 0.4rem; }
     @media (prefers-reduced-motion: no-preference) {
-      .fold[open] .fold-body { animation: fold-in 0.16s ease-out; }
+      .rung[open] .detail { animation: fold-in 0.16s ease-out; }
       @keyframes fold-in { from { opacity: 0; transform: translateY(-2px); } to { opacity: 1; transform: none; } }
     }
   `;
@@ -73,7 +77,6 @@ export class CareerLadder extends LitElement {
     super();
     this.framework = null;
     this.person = null;
-    this.open = false;
   }
 
   render() {
@@ -106,21 +109,29 @@ export class CareerLadder extends LitElement {
       </p>`;
   }
 
+  /**
+   * Un peldaño: en la lista solo su código, su título y a quién describe. El
+   * detalle se despliega a voluntad — con los doce niveles y sus expectativas
+   * abiertos de golpe, la página es un muro de texto y no se ve nada.
+   */
   _renderLevel(l, miNivel, miObjetivo) {
     const marca = this._mark(l.id, miNivel, miObjetivo);
     return html`
-      <article class="rung ${marca ? 'mine' : ''}">
-        <header>
+      <details class="rung ${marca ? 'mine' : ''}">
+        <summary>
+          <span class="chev" aria-hidden="true">›</span>
           <span class="code">${l.code}</span>
           <span class="title">${l.title}</span>
           ${marca ? html`<span class="mark">${marca}</span>` : null}
           ${l.typicalProfile ? html`<span class="profile">${l.typicalProfile}</span>` : null}
-        </header>
-        ${l.description ? html`<p class="desc">${l.description}</p>` : null}
-        ${l.expectations.length > 0
-          ? html`<div class="exps">${l.expectations.map((e) => this._fold(e.dimension.name, e.text))}</div>`
-          : html`<p class="empty">Sin expectativas escritas todavía.</p>`}
-      </article>`;
+        </summary>
+        <div class="detail">
+          ${l.description ? html`<p class="desc">${l.description}</p>` : null}
+          ${l.expectations.length > 0
+            ? html`<div class="exps">${l.expectations.map((e) => this._exp(e.dimension.name, e.text))}</div>`
+            : html`<p class="empty">Sin expectativas escritas todavía.</p>`}
+        </div>
+      </details>`;
   }
 
   /** Etiqueta de «estás aquí» / «vas aquí», o null. Sin ternarios anidados. */
@@ -130,20 +141,13 @@ export class CareerLadder extends LitElement {
     return null;
   }
 
-  /** Una expectativa: plegada si tiene texto, y dicha como pendiente si no. */
-  _fold(name, text) {
-    if (!text) {
-      return html`
-        <div class="fold fold-empty">
-          <span class="dim">${name}</span>
-          <span class="todo">pendiente de definir</span>
-        </div>`;
-    }
+  /** Lo que se espera en una dimensión. A la vista: el plegado ya lo hace el nivel. */
+  _exp(name, text) {
     return html`
-      <details class="fold" ?open=${this.open}>
-        <summary><span class="dim">${name}</span></summary>
-        <p class="fold-body">${text}</p>
-      </details>`;
+      <div class="exp">
+        <span class="dim">${name}</span>
+        ${text ? html`<p class="exp-text">${text}</p>` : html`<span class="todo">pendiente de definir</span>`}
+      </div>`;
   }
 }
 
