@@ -11,25 +11,25 @@ import { isEmployeeOf, hubDestination, needsEmployeePerson } from './hubBoot.js'
 
 describe('isEmployeeOf: quién es empleado del dominio de la instancia', () => {
   it('lo es con el email verificado del dominio configurado', () => {
-    expect(isEmployeeOf('ana@tribbuapp.com', true, 'tribbuapp.com')).toBe(true);
+    expect(isEmployeeOf('ana@ejemplo.test', true, 'ejemplo.test')).toBe(true);
   });
 
   it('sin verificar el email, no', () => {
     // El dominio se comprueba sobre algo que el usuario podría no controlar:
     // sin verificación, cualquiera se pone ese correo al registrarse.
-    expect(isEmployeeOf('ana@tribbuapp.com', false, 'tribbuapp.com')).toBe(false);
+    expect(isEmployeeOf('ana@ejemplo.test', false, 'ejemplo.test')).toBe(false);
   });
 
   it('de otro dominio, no', () => {
-    expect(isEmployeeOf('ana@gmail.com', true, 'tribbuapp.com')).toBe(false);
+    expect(isEmployeeOf('ana@otra.test', true, 'ejemplo.test')).toBe(false);
   });
 
   it('sin dominio configurado no lo es NADIE: la demo no reparte acceso por email', () => {
-    expect(isEmployeeOf('ana@tribbuapp.com', true, '')).toBe(false);
+    expect(isEmployeeOf('ana@ejemplo.test', true, '')).toBe(false);
   });
 
   it('no se cuela quien lleva el dominio en otra parte del correo', () => {
-    expect(isEmployeeOf('tribbuapp.com@evil.com', true, 'tribbuapp.com')).toBe(false);
+    expect(isEmployeeOf('ejemplo.test@otra.test', true, 'ejemplo.test')).toBe(false);
   });
 });
 
